@@ -7,28 +7,35 @@ from torch.nn import functional as F
 import matplotlib.pyplot as plt
 from utils import batch_generator
 from utils import nb_classes
+from utils import nb_postags
 from utils import max_sentence_size
 from lang_model import CharacterLanguageModel
 from lang_model import embedding_size
 
 class POSTag(nn.Module):
-    def __init__(self, hidden_state_size = 100, nb_rnn_layers = 2):
+    def __init__(self, hidden_state_size = 50, nb_rnn_layers = 1):
         super(POSTag, self).__init__()
 
-        self.w = nn.Parameter(torch.randn(nb_rnn_layers * 2, 1, hidden_state_size // 2))
-        self.h = nn.Parameter(torch.randn(nb_rnn_layers * 2, 1, hidden_state_size // 2))
+        self.w = nn.Parameter(torch.randn(nb_rnn_layers * 2, 
+                                          max_sentence_size, 
+                                          hidden_state_size))
+        self.h = nn.Parameter(torch.randn(nb_rnn_layers * 2, 
+                                          max_sentence_size,
+                                          hidden_state_size))
         
         self.bi_lstm = nn.LSTM(embedding_size, 
-                               hidden_state_size // 2,
+                               hidden_state_size,
                                nb_rnn_layers,
-                               batch_first=True,
                                bidirectional=True)
+        
+        self.fc = nn.Linear(hidden_state_size * 2, nb_postags)
 
     def forward(self, x):
-        print(self.h.size(), self.w.size())
         out, hn = self.bi_lstm(x, (self.h, self.w))
         
-        return out, hn
+        tags = [self.fc(xx) for xx in out[:]]
+        
+        return out, tags
 
 class TestModel(nn.Module):
     def __init__(self):
@@ -41,20 +48,18 @@ class TestModel(nn.Module):
         emb = self.lang_model.forward(x)
         emb = Variable(emb)
 
-        tags, hn_pos = self.pos_tag(emb)
+        hn_pos = self.pos_tag(emb)
         
-        return tags
+        return hn_pos
 
-    
-gen = batch_generator(16, 100)    
+gen = batch_generator(16, 100)
 
-text, sent = next(gen)
+text, tags, sent = next(gen)
 
 model = TestModel()
 
-ys = model.forward(text)
-print(ys)
-
+ys, tags = model.forward(text)
+print(len(tags))
 
 
 

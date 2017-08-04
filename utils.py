@@ -1,11 +1,26 @@
+import nltk
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from nltk.tokenize import word_tokenize
+from sklearn.preprocessing import OneHotEncoder
 
 dataset_file = './data/Reviews.csv'
 max_sentence_size = 200
 boc_size = 10000
+
+postags = ["CC", "CD", "DT", "EX", "FW", "IN", "JJ", "JJR", "JJS",
+           "LS", "MD", "NN", "NNS", "NNP", "NNPS", "PDT", "POS", "PRP",
+           "PRP$", "RB", "RBR", "RBS", "RP", "TO", "UH", "VB", "VBD", "VBG",
+           "VBN", "VBP", "VBZ", "WDT", "WP", "WP$", "WRB"]
+
+nb_postags = len(postags)
+
+t2k = dict([(v,k) for k, v in enumerate(postags)])
+k2t = dict([(k,v) for k, v in enumerate(postags)])
+
+tag_encoder = OneHotEncoder()
+tag_encoder.fit(np.arange(nb_postags).reshape(-1, 1))
 
 def get_dataset(batch_size):
     """ Gets the dataset iterator
@@ -32,7 +47,6 @@ del boc
 def word2vec(word):
     vec = map(c2k.get, word.lower())
     vec = list(vec)
-    vec = np.array(vec, dtype=np.int32)
     return vec
 
 def vec2word(vec):
@@ -51,6 +65,19 @@ def vec2sent(vec):
     sent = " ".join(words)
     return sent
 
+def sent2tags(sentence):
+    tags = word_tokenize(sentence + " <EOS>")
+    tags = nltk.pos_tag(tags)
+    tags = [t2k.get(t[1]) for t in tags if t[1] in postags]
+    tags = np.array(tags).reshape(-1, 1)
+    tags = tag_encoder.transform(tags).toarray()
+    return tags
+
+def tags2sent(tags):
+    sent = map(k2t.get, tags)
+    sent = " ".join(tags)
+    return sent
+
 def batch_generator(batch_size, nb_batches):
     """ Batch generator for the many task joint model.
     """
@@ -61,12 +88,13 @@ def batch_generator(batch_size, nb_batches):
         chunk = dataset.get_chunk()
 
         text = chunk['Text'].apply(sent2vec).values
+        tags = chunk['Text'].apply(sent2tags).values
         
         # The sentiment of the review where 1 is positive and 0 is negative
         sent = (chunk['Score'] >= 4).values
         sent = np.int32(sent)
 
-        yield text, sent
+        yield text, tags, sent
 
         if batch_count >= nb_batches:
             dataset = get_dataset(batch_size)

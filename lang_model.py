@@ -15,7 +15,7 @@ class CharacterLanguageModel(nn.Module):
         self.embedding = nn.Embedding(nb_classes, embedding_size)
         
     def forward(self, x):
-        arr = torch.zeros(len(x), max_sentence_size, 1, embedding_size)
+        arr = torch.zeros(len(x), max_sentence_size, embedding_size)
         
         for i, bow in enumerate(x):
             j = 0
