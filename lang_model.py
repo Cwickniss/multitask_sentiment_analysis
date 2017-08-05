@@ -20,7 +20,7 @@ class CharacterLanguageModel(nn.Module):
         for i, bow in enumerate(x):
             j = 0
             
-            for vec in bow[:max_sentence_size]:
+            for vec in bow:
                 vec = np.unique(vec)
                 vec = torch.from_numpy(vec).long()
                 vec = Variable(vec)

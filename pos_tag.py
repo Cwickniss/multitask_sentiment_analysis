@@ -33,9 +33,15 @@ class POSTag(nn.Module):
     def forward(self, x):
         out, hn = self.bi_lstm(x, (self.h, self.w))
         
-        tags = [self.fc(xx) for xx in out[:]]
+        tags = np.zeros((x.size(0), max_sentence_size, nb_postags))
         
-        return out, tags
+        for i, xx in enumerate(out[:]):
+            tags[i] = self.fc(xx).data.numpy()
+        
+        tags = torch.from_numpy(tags)
+        tags = Variable(tags)
+        
+        return tags, out
 
 class TestModel(nn.Module):
     def __init__(self):
@@ -48,19 +54,44 @@ class TestModel(nn.Module):
         emb = self.lang_model.forward(x)
         emb = Variable(emb)
 
-        hn_pos = self.pos_tag(emb)
+        pos_tags, hs_pos_tags = self.pos_tag(emb)
         
-        return hn_pos
+        return pos_tags, hs_pos_tags
 
-gen = batch_generator(16, 100)
+def avg_cross_entropy_loss(predicted, target):
+    loss = F.cross_entropy(predicted[0], target[0])
 
-text, tags, sent = next(gen)
+    for i in range(1, predicted.size(0)):
+        loss += F.cross_entropy(predicted[i], target[i])
+
+    loss = loss / predicted.size(0)
+    
+    return loss
+
+nb_batches = 10
+batch_size = 8
+epochs = 2
+
+gen = batch_generator(batch_size, nb_batches)
 
 model = TestModel()
+adam = optim.Adam(model.parameters(), lr=1e-2)
 
-ys, tags = model.forward(text)
-print(len(tags))
+for epoch in range(epochs):
+    for batch in range(nb_batches):
+        input_text, target_tags, sentiment = next(gen)
 
+        target_tags = torch.from_numpy(target_tags).long()
+        target_tags = Variable(target_tags, requires_grad=True)
 
+        out_tags, _ = model.forward(input_text)
 
+        loss = avg_cross_entropy_loss(out_tags, target_tags)
+        
+        print("Epoch:", epoch,
+              "Batch:", batch,
+              "Loss:", loss.data[0])
 
+        adam.zero_grad()
+        loss.backward()
+        adam.step()
