@@ -85,7 +85,7 @@ if __name__ == '__main__':
     try:
         for epoch in range(epochs):
             for batch in range(nb_batches):
-                input_text, target_tags, sentiment = next(gen)
+                input_text, target_tags, _, _ = next(gen)
 
                 out_tags = model.forward(input_text)
 
