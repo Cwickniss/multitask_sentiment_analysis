@@ -14,7 +14,7 @@ from lang_model import CharacterLanguageModel
 from lang_model import embedding_size
 
 class POSTag(nn.Module):
-    def __init__(self, hidden_state_size = 50, nb_rnn_layers = 1):
+    def __init__(self, hidden_state_size, nb_rnn_layers):
         super(POSTag, self).__init__()
 
         self.w = nn.Parameter(torch.randn(nb_rnn_layers * 2, 
@@ -67,7 +67,7 @@ if __name__ == '__main__':
             
             return out
     
-    nb_batches = 15
+    nb_batches = 100
     batch_size = 8
     epochs = 100
     hidden_state_size = 200
@@ -115,7 +115,7 @@ if __name__ == '__main__':
         ax.set_title('Hidden State Size: {}, Layers: {}'.format(hidden_state_size, 
                                                                 nb_rnn_layers))
 
-        ax.set_xlabel('Time')
+        ax.set_xlabel('Batch Count')
         ax.set_ylabel('Loss')
 
         plt.savefig("./results/" + fname)

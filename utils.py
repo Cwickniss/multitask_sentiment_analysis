@@ -36,10 +36,13 @@ def avg_cross_entropy_loss(predicted, targets):
     return loss
 
 chunk_gram = r"""
-NP: {<DT|JJ|NN.*>+}          # Chunk sequences of DT, JJ, NN
-PP: {<IN><NP>}               # Chunk prepositions followed by NP
-VP: {<VB.*><NP|PP|CLAUSE>+$} # Chunk verbs and their arguments
-CLAUSE: {<NP><VP>}           # Chunk NP, VP
+NP: {<DT|JJ|NN.*>+}             # Chunk sequences of DT, JJ, NN
+PP: {<IN><NP>}                  # Chunk prepositions followed by NP
+VP: {<VB.*><NP|PP|CLAUSE>+$}    # Chunk verbs and their arguments
+ACTION: {<PRP><VBP><VBN>}
+CLAUSE: {<NP><VP>}              # Chunk NP, VP
+SENT: {<.*>+}
+      }<.>{
 """
 
 chunk_parser = nltk.RegexpParser(chunk_gram)            
@@ -124,7 +127,7 @@ def tags2sent(tags):
 def sent2chunk(sentence):
     tags = word_tokenize(sentence)
     tags = nltk.pos_tag(tags)
-
+    
     chunked = chunk_parser.parse(tags)
     
     out = list()
