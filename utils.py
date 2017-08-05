@@ -9,7 +9,7 @@ from nltk.tokenize import word_tokenize
 from sklearn.preprocessing import OneHotEncoder
 
 dataset_file = './data/Reviews.csv'
-max_sentence_size = 200
+max_sentence_size = 300
 max_word_size = 15
 boc_size = 10000
 
@@ -34,6 +34,15 @@ def avg_cross_entropy_loss(predicted, targets):
     loss = loss / length
 
     return loss
+
+chunk_gram = r"""
+  NP: {<DT|JJ|NN.*>+}          # Chunk sequences of DT, JJ, NN
+  PP: {<IN><NP>}               # Chunk prepositions followed by NP
+  VP: {<VB.*><NP|PP|CLAUSE>+$} # Chunk verbs and their arguments
+  CLAUSE: {<NP><VP>}           # Chunk NP, VP
+"""
+
+chunk_parser = nltk.RegexpParser(chunk_gram)            
 
 postags = ["CC", "CD", "DT", "EX", "FW", "IN", "JJ", "JJR", "JJS",
            "LS", "MD", "NN", "NNS", "NNP", "NNPS", "PDT", "POS", "PRP",
@@ -112,6 +121,37 @@ def tags2sent(tags):
     
     return sent
 
+def sent2chunk(sentence):
+    tags = word_tokenize(sentence)
+    tags = nltk.pos_tag(tags)
+    chunked = chunk_parser.parse(tags)
+    out = list()
+    
+    for chunk in chunked:
+        if type(chunk) == nltk.tree.Tree:
+            floor = False
+            lvl = 0
+            
+            while not floor:
+                sub_tree = []
+                
+                for chk in chunk:
+                    if type(chk) == nltk.tree.Tree:
+                        for e in chk:
+                            sub_tree.append(e)
+                    else:
+                        out.append(lvl)
+                
+                if len(sub_tree) > 0:
+                    chunk = sub_tree
+                    lvl += 1
+                else:
+                    floor = True
+        else:
+            out.append(0)
+
+    return out
+    
 def batch_generator(batch_size, nb_batches):
     """ Batch generator for the many task joint model.
     """
@@ -121,20 +161,25 @@ def batch_generator(batch_size, nb_batches):
     while True:
         chunk = dataset.get_chunk()
         
-        text, tags = [], []
+        text, tags, chunks = [], [], []
 
         for sent in chunk['Text'].values:
             tags.append(sent2tags(sent))
             text.append(sent2vec(sent))
-
+            chunks.append(sent2chunk(sent))
+            
         # The sentiment of the review where 1 is positive and 0 is negative
         sent = (chunk['Score'] >= 4).values
         sent = np.int32(sent)
 
-        yield text, tags, sent
+        yield text, tags, chunks, sent
 
         batch_count += 1
         
         if batch_count >= nb_batches:
             dataset = get_dataset(batch_size)
             batch_count = 0
+
+gen = batch_generator(10, 100)
+
+text, tags, chunks, sent = next(gen)
