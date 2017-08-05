@@ -5,6 +5,7 @@ from torch import optim
 from torch.autograd import Variable
 from utils import nb_classes
 from utils import max_sentence_size
+from utils import batch_generator
 
 embedding_size = 50
 
@@ -13,25 +14,23 @@ class CharacterLanguageModel(nn.Module):
         super(CharacterLanguageModel, self).__init__()
         
         self.embedding = nn.Embedding(nb_classes, embedding_size)
-        
+
     def forward(self, x):
-        arr = torch.zeros(len(x), max_sentence_size, embedding_size)
-        
-        for i, bow in enumerate(x):
-            j = 0
+        arr = list()
+
+        for sentence in x:
+            sent_emb = list()
             
-            for vec in bow:
-                vec = np.unique(vec)
-                vec = torch.from_numpy(vec).long()
-                vec = Variable(vec)
+            for word in sentence:
+                emb = np.array(word)
+                emb = torch.from_numpy(emb)
+                emb = Variable(emb)
                 
-                emb = self.embedding(vec)
-                
-                # Squeezes the embedding taking the average of each 
-                # component. MxN -> 1xN
+                emb = self.embedding(emb)
                 emb = torch.mean(emb, 0)
                 
-                arr[i][j] = emb.data
-                j += 1
+                sent_emb.append(emb)
+            
+            arr.append(sent_emb)
 
         return arr

@@ -2,26 +2,40 @@ import nltk
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
 from torch.nn import functional as F
+from torch.autograd import Variable
 from nltk.tokenize import word_tokenize
 from sklearn.preprocessing import OneHotEncoder
 
 dataset_file = './data/Reviews.csv'
 max_sentence_size = 200
-max_word_size = 30
+max_word_size = 15
 boc_size = 10000
 
-def avg_cross_entropy_loss(predicted, target):
-    loss = F.cross_entropy(predicted[0], target[0])
-
-    for i in range(1, predicted.size(0)):
-        loss += F.cross_entropy(predicted[i], target[i])
-
-    loss = loss / predicted.size(0)
+def avg_cross_entropy_loss(predicted, targets):
+    losses = []
+    length = len(predicted)
     
+    for i in range(length):
+        target = np.array(targets[i], dtype=np.float32)
+        target = torch.from_numpy(target)
+        target = Variable(target).long()
+        
+        loss = F.cross_entropy(predicted[i], target)
+        
+        losses.append(loss)
+
+    loss = losses[0]
+    
+    for i in range(1, length):
+        loss += losses[i]
+    
+    loss = loss / length
+
     return loss
 
-postags = ["EMPTY", "CC", "CD", "DT", "EX", "FW", "IN", "JJ", "JJR", "JJS",
+postags = ["CC", "CD", "DT", "EX", "FW", "IN", "JJ", "JJR", "JJS",
            "LS", "MD", "NN", "NNS", "NNP", "NNPS", "PDT", "POS", "PRP",
            "PRP$", "RB", "RBR", "RBS", "RP", "TO", "UH", "VB", "VBD", "VBG",
            "VBN", "VBP", "VBZ", "WDT", "WP", "WP$", "WRB", "UKN"]
@@ -44,60 +58,58 @@ boc = boc['Text'].values
 boc = "".join(boc).lower()
 boc = set(boc)
 boc = sorted(boc)
-boc = ['empty'] + boc
 
 # Character Classes Dictionaries
 c2k = dict([(v,k) for k, v in enumerate(boc)])
 k2c = dict([(k,v) for k, v in enumerate(boc)])
 
-nb_classes = len(boc) + 1
+nb_classes = len(boc)
 
 del boc
 
 def word2vec(word):
     vec = map(c2k.get, word.lower())
     vec = list(vec)
+    
     return vec
 
 def vec2word(vec):
     word = map(k2c.get, vec)
-    word = "".join([c for c in word if c != 'empty'])
+    word = "".join(word)
+    
     return word
 
 def sent2vec(sentence):
     words = word_tokenize(sentence)
     vecs = map(word2vec, words)
+    vecs = list(vecs)
+    vecs = vecs[:max_sentence_size]
     
-    sent = np.zeros((len(sentence), max_word_size))
-    
-    for i, vec in enumerate(vecs):
-        for j, char in enumerate(vec[:max_word_size]):
-            sent[i][j] = char
-    
-    return sent
+    return vecs
 
 def vec2sent(vec):
-    words = map(vec2word, vec)
+    words = [vec2word(v) for v in vec if type(v) == list]
     sent = " ".join(words)
+    
     return sent
 
 def sent2tags(sentence):
-    tags = word_tokenize(sentence[:max_sentence_size])
+    tags = word_tokenize(sentence)
     tags = nltk.pos_tag(tags)
+    out = []
     
-    out = np.zeros((max_sentence_size))
-    
-    for k, tag in enumerate(tags):
+    for _, tag in tags[:max_sentence_size]:
         if tag in postags:
-            out[k] = t2k.get(tag)
+            out.append(t2k.get(tag))
         else:
-            out[k] = t2k.get("UKN")
-    
+            out.append(t2k.get("UKN"))
+
     return out
 
 def tags2sent(tags):
     sent = map(k2t.get, tags)
     sent = " ".join(tags)
+    
     return sent
 
 def batch_generator(batch_size, nb_batches):
@@ -105,24 +117,15 @@ def batch_generator(batch_size, nb_batches):
     """
     batch_count = 0
     dataset = get_dataset(batch_size)
-    eos_vec = sent2vec(" <EOS>")
     
     while True:
         chunk = dataset.get_chunk()
         
-        text = np.zeros((batch_size, max_sentence_size, max_word_size), dtype=np.int32)
-        tags = np.zeros((batch_size, max_sentence_size), dtype=np.int32)
+        text, tags = [], []
 
-        for i, sent in enumerate(chunk['Text'].values):
-            tags[i] = sent2tags(sent)
-            vecs = sent2vec(sent)
-            
-            for j, vec in enumerate(vecs[:max_sentence_size - 6]):
-                text[i][j] = vec
-            
-            for k in range(6):
-                j += 1
-                text[i][j] = eos_vec[k]
+        for sent in chunk['Text'].values:
+            tags.append(sent2tags(sent))
+            text.append(sent2vec(sent))
 
         # The sentiment of the review where 1 is positive and 0 is negative
         sent = (chunk['Score'] >= 4).values
@@ -130,6 +133,8 @@ def batch_generator(batch_size, nb_batches):
 
         yield text, tags, sent
 
+        batch_count += 1
+        
         if batch_count >= nb_batches:
             dataset = get_dataset(batch_size)
             batch_count = 0

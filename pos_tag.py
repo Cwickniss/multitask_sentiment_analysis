@@ -23,7 +23,7 @@ class POSTag(nn.Module):
         self.h = nn.Parameter(torch.randn(nb_rnn_layers * 2, 
                                           max_sentence_size,
                                           hidden_state_size))
-        
+
         self.bi_lstm = nn.LSTM(embedding_size, 
                                hidden_state_size,
                                nb_rnn_layers,
@@ -32,15 +32,10 @@ class POSTag(nn.Module):
         self.fc = nn.Linear(hidden_state_size * 2, nb_postags)
 
     def forward(self, x):
-        out, hn = self.bi_lstm(x, (self.h, self.w))
-        
-        tags = np.zeros((x.size(0), max_sentence_size, nb_postags))
-        
-        for i, xx in enumerate(out[:]):
-            tags[i] = self.fc(xx).data.numpy()
-        
-        tags = torch.from_numpy(tags)
-        tags = Variable(tags)
+        out, hn = self.bi_lstm(x, (self.h[:,:x.size(1),:], 
+                                   self.w[:,:x.size(1),:]))
+
+        tags = self.fc(out[0])
         
         return tags, out
 
@@ -54,18 +49,29 @@ if __name__ == '__main__':
             self.pos_tag = POSTag(hidden_state_size, nb_rnn_layers)
 
         def forward(self, x):
-            emb = self.lang_model.forward(x)
-            emb = Variable(emb)
-
-            pos_tags, hs_pos_tags = self.pos_tag(emb)
-
-            return pos_tags, hs_pos_tags
+            embedded = self.lang_model.forward(x)
+            out = list()
+            
+            for batch in embedded:
+                sent = np.zeros((1, len(batch), embedding_size), dtype=np.float32)
+                
+                for i, word in enumerate(batch):
+                    sent[0,i] = word.data.numpy()
+                
+                sent = torch.from_numpy(sent)
+                sent = Variable(sent)
+                
+                tags, hn_tags = self.pos_tag.forward(sent)
+                
+                out.append(tags)
+            
+            return out
     
-    nb_batches = 100
+    nb_batches = 15
     batch_size = 8
-    epochs = 2
-    hidden_state_size = 50
-    nb_rnn_layers = 1
+    epochs = 100
+    hidden_state_size = 200
+    nb_rnn_layers = 2
 
     gen = batch_generator(batch_size, nb_batches)
 
@@ -81,10 +87,7 @@ if __name__ == '__main__':
             for batch in range(nb_batches):
                 input_text, target_tags, sentiment = next(gen)
 
-                target_tags = torch.from_numpy(target_tags).long()
-                target_tags = Variable(target_tags, requires_grad=True)
-
-                out_tags, _ = model.forward(input_text)
+                out_tags = model.forward(input_text)
 
                 loss = avg_cross_entropy_loss(out_tags, target_tags)
 
