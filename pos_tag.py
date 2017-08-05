@@ -61,7 +61,7 @@ if __name__ == '__main__':
 
             return pos_tags, hs_pos_tags
     
-    nb_batches = 10
+    nb_batches = 100
     batch_size = 8
     epochs = 2
     hidden_state_size = 50
@@ -96,7 +96,7 @@ if __name__ == '__main__':
                 loss.backward()
                 adam.step()
 
-                if batch % 2 == 0:
+                if batch % 10 == 0:
                     losses.append(loss.data[0])
             
             torch.save(model.state_dict(), './weights/{}.th'.format(fname))
@@ -114,5 +114,5 @@ if __name__ == '__main__':
 
         ax.set_xlabel('Time')
         ax.set_ylabel('Loss')
-        
+
         plt.savefig("./results/" + fname)
