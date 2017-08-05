@@ -2,6 +2,7 @@ import nltk
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from torch.nn import functional as F
 from nltk.tokenize import word_tokenize
 from sklearn.preprocessing import OneHotEncoder
 
@@ -9,6 +10,16 @@ dataset_file = './data/Reviews.csv'
 max_sentence_size = 200
 max_word_size = 30
 boc_size = 10000
+
+def avg_cross_entropy_loss(predicted, target):
+    loss = F.cross_entropy(predicted[0], target[0])
+
+    for i in range(1, predicted.size(0)):
+        loss += F.cross_entropy(predicted[i], target[i])
+
+    loss = loss / predicted.size(0)
+    
+    return loss
 
 postags = ["EMPTY", "CC", "CD", "DT", "EX", "FW", "IN", "JJ", "JJR", "JJS",
            "LS", "MD", "NN", "NNS", "NNP", "NNPS", "PDT", "POS", "PRP",
