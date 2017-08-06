@@ -29,18 +29,39 @@ class Chunking(nn.Module):
                                           max_sentence_size,
                                           hidden_state_size))
 
+        self.embedding = nn.Embedding(nb_postags, 20)
+        
         self.bi_lstm = nn.LSTM(self.input_size, 
                                hidden_state_size,
                                nb_rnn_layers,
                                bidirectional=True)
 
+    def mult_pos_emb(self, tags, emb):
+        tags = tags[:,np.newaxis].data.numpy()
+        emb = emb.data.numpy()
+        
+        y_pos = tags * emb.T
+        y_pos = np.sum(y_pos.T, axis=1).T
+        
+        y_pos = torch.from_numpy(y_pos)
+        y_pos = Variable(y_pos).long()
+        y_pos = y_pos.view(1, -1, nb_postags)
+        
+        return y_pos
+        
     def forward(self, x, tags, hn_tags):
-        gt = torch.cat([hn_tags, x, tags.view(1, -1, nb_postags)], dim=2)
+        l_emb = torch.arange(0, nb_postags)
+        l_emb = Variable(l_emb).long()
+        l_emb = self.embedding(l_emb)
+        
+        y_pos = self.mult_pos_emb(tags, l_emb)
+                
+        gt = torch.cat([hn_tags, x, y_pos], dim=2)
         
         out, hn = self.bi_lstm(gt, (self.h[:,:x.size(1),:], 
                                     self.w[:,:x.size(1),:]))
         
-        print(x.size(), out.size())
+        #print(x.size(), out.size())
         
         return x, None
 
