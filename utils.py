@@ -47,6 +47,13 @@ SENT: {<.*>+}
 
 chunk_parser = nltk.RegexpParser(chunk_gram)            
 
+chunk_tags = ['NP', 'PP', 'VP', 'ACTION', 'CLAUSE', 'SENT', 'S']
+
+nb_chunktags = len(chunk_tags)
+
+chk2k = dict([(v,k) for k, v in enumerate(chunk_tags)])
+k2chk = dict([(k,v) for k, v in enumerate(chunk_tags)])
+
 postags = ["CC", "CD", "DT", "EX", "FW", "IN", "JJ", "JJR", "JJS",
            "LS", "MD", "NN", "NNS", "NNP", "NNPS", "PDT", "POS", "PRP",
            "PRP$", "RB", "RBR", "RBS", "RP", "TO", "UH", "VB", "VBD", "VBG",
@@ -130,33 +137,30 @@ def sent2chunk(sentence):
     
     chunked = chunk_parser.parse(tags)
     
-    out = list()
+    flatten = [chunk for chunk in chunked]
+    out = ['S'] * len(tags)
+    pointer = 0
     
-    for chunk in chunked:
-        if type(chunk) == nltk.tree.Tree:
-            floor = False
-            lvl = 1
-            
-            while not floor:
-                sub_tree = []
-                
-                for chk in chunk:
-                    if type(chk) == nltk.tree.Tree:
-                        for e in chk:
-                            sub_tree.append(e)
-                    else:
-                        out.append(lvl)
-                
-                if len(sub_tree) > 0:
-                    chunk = sub_tree
-                    lvl += 1
-                else:
-                    floor = True
-        else:
-            out.append(0)
+    while pointer < len(out):
+        item = flatten[pointer]
+        
+        if type(item) == tuple:
+            if type(item[1]) == nltk.tree.Tree:
+                item = item[1]
+            else:
+                if item[0] in chunk_tags:
+                    out[pointer] = item[0]
+                pointer += 1
+                continue
+        
+        flatten = flatten[:pointer] + flatten[pointer+1:]
+        for i, leaf in enumerate(item):
+            flatten = flatten[:pointer+i] + [(item._label, leaf)] + flatten[pointer+i:]
+    
+    out = [chk2k.get(chk) for chk in out]
 
     return out
-    
+        
 def batch_generator(batch_size, nb_batches):
     """ Batch generator for the many task joint model.
     """
