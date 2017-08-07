@@ -102,7 +102,7 @@ class TestModel(nn.Module):
             chunk_out.append(chunked)
 
         return tags_out, chunk_out
-
+    
 gen = batch_generator(8, 100)
 
 model = TestModel()

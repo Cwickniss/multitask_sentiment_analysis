@@ -13,6 +13,29 @@ from utils import avg_cross_entropy_loss
 from lang_model import CharacterLanguageModel
 from lang_model import embedding_size
 
+def postag_objective_function(predicted, targets, W, postag_lambda = 0.2):
+    losses = []
+    length = len(predicted)
+
+    for i in range(length):
+        target = np.array(targets[i], dtype=np.float32)
+        target = torch.from_numpy(target)
+        target = Variable(target).long()
+
+        loss  = F.cross_entropy(predicted[i], target)
+        loss += postag_lambda * (W[i].norm() ** 2)
+
+        losses.append(loss)
+
+        loss = losses[0]
+
+    for i in range(1, length):
+        loss += losses[i]
+
+    loss = loss / length
+
+    return loss
+
 class POSTag(nn.Module):
     def __init__(self, hidden_state_size, nb_rnn_layers):
         super(POSTag, self).__init__()
@@ -50,7 +73,7 @@ if __name__ == '__main__':
 
         def forward(self, x):
             embedded = self.lang_model.forward(x)
-            out = list()
+            out_tags, out_hn_tags = list(), list()
             
             for batch in embedded:
                 sent = np.zeros((1, len(batch), embedding_size), dtype=np.float32)
@@ -63,9 +86,10 @@ if __name__ == '__main__':
                 
                 tags, hn_tags = self.pos_tag.forward(sent)
                 
-                out.append(tags)
+                out_tags.append(tags)
+                out_hn_tags.append(hn_tags)
             
-            return out
+            return out_tags, out_hn_tags
     
     nb_batches = 100
     batch_size = 8
@@ -87,9 +111,9 @@ if __name__ == '__main__':
             for batch in range(nb_batches):
                 input_text, target_tags, _, _ = next(gen)
 
-                out_tags = model.forward(input_text)
-
-                loss = avg_cross_entropy_loss(out_tags, target_tags)
+                out_tags, out_hn_tags = model.forward(input_text)
+                
+                loss = postag_objective_function(out_tags, target_tags, out_hn_tags)
 
                 print("Epoch:", epoch,
                       "Batch:", batch,
