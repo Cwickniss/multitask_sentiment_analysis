@@ -13,17 +13,57 @@ from utils import avg_cross_entropy_loss
 from lang_model import CharacterLanguageModel
 from lang_model import embedding_size
 
-def postag_objective_function(predicted, targets, W, postag_lambda = 0.2):
+class POSTag(nn.Module):
+    """ Returns the Part of Speech Tag for each word
+        embedding in a given sentence.
+    """
+    def __init__(self, hidden_state_size, nb_rnn_layers):
+        super(POSTag, self).__init__()
+
+        self.w = nn.Parameter(torch.randn(nb_rnn_layers * 2, 
+                                          max_sentence_size, 
+                                          hidden_state_size))
+        self.h = nn.Parameter(torch.randn(nb_rnn_layers * 2, 
+                                          max_sentence_size,
+                                          hidden_state_size))
+
+        # Bidirectional LSTM
+        self.bi_lstm = nn.LSTM(embedding_size, 
+                               hidden_state_size,
+                               nb_rnn_layers,
+                               bidirectional=True)
+        
+        self.fc = nn.Linear(hidden_state_size * 2, nb_postags)
+
+    def forward(self, x):
+        # Runs the LSTM for each word-vector in the sentence x
+        out, hn = self.bi_lstm(x, (self.h[:,:x.size(1),:],
+                                   self.w[:,:x.size(1),:]))
+
+        # Runs a linear classifier on the outputed state vector
+        tags = self.fc(out[0])
+        
+        return tags, out
+
+def postag_objective_function(predicted, targets, W, Lambda = 0.1):
+    """ The objective function used to calculate the loss during the 
+        training of the Part of Speech Module.
+        
+        J(y_t, y', W) = -Sum_s(Sum_t( log(p(y_t = y' | h_t)) ))
+                      + Lamba * || W_pos ||^2
+        
+        where Lambda is the L2 regularization term.
+    """
     losses = []
     length = len(predicted)
+    L2_norm = Lambda * (W.norm() ** 2)
 
     for i in range(length):
         target = np.array(targets[i], dtype=np.float32)
         target = torch.from_numpy(target)
         target = Variable(target).long()
 
-        loss  = F.cross_entropy(predicted[i], target)
-        loss += postag_lambda * (W[i].norm() ** 2)
+        loss = F.nll_loss(predicted[i], target) + L2_norm
 
         losses.append(loss)
 
@@ -35,33 +75,7 @@ def postag_objective_function(predicted, targets, W, postag_lambda = 0.2):
     loss = loss / length
 
     return loss
-
-class POSTag(nn.Module):
-    def __init__(self, hidden_state_size, nb_rnn_layers):
-        super(POSTag, self).__init__()
-
-        self.w = nn.Parameter(torch.randn(nb_rnn_layers * 2, 
-                                          max_sentence_size, 
-                                          hidden_state_size))
-        self.h = nn.Parameter(torch.randn(nb_rnn_layers * 2, 
-                                          max_sentence_size,
-                                          hidden_state_size))
-
-        self.bi_lstm = nn.LSTM(embedding_size, 
-                               hidden_state_size,
-                               nb_rnn_layers,
-                               bidirectional=True)
-        
-        self.fc = nn.Linear(hidden_state_size * 2, nb_postags)
-
-    def forward(self, x):
-        out, hn = self.bi_lstm(x, (self.h[:,:x.size(1),:], 
-                                   self.w[:,:x.size(1),:]))
-
-        tags = self.fc(out[0])
-        
-        return tags, out
-
+    
 if __name__ == '__main__':
 
     class TestModel(nn.Module):
@@ -69,7 +83,7 @@ if __name__ == '__main__':
             super(TestModel, self).__init__()
 
             self.lang_model = CharacterLanguageModel()
-            self.pos_tag = POSTag(hidden_state_size, nb_rnn_layers)
+            self.postag = POSTag(hidden_state_size, nb_rnn_layers)
 
         def forward(self, x):
             embedded = self.lang_model.forward(x)
@@ -84,7 +98,7 @@ if __name__ == '__main__':
                 sent = torch.from_numpy(sent)
                 sent = Variable(sent)
                 
-                tags, hn_tags = self.pos_tag.forward(sent)
+                tags, hn_tags = self.postag.forward(sent)
                 
                 out_tags.append(tags)
                 out_hn_tags.append(hn_tags)
@@ -96,13 +110,16 @@ if __name__ == '__main__':
     epochs = 100
     hidden_state_size = 200
     nb_rnn_layers = 2
-
+    postag_regularization = 0.001
+    
     gen = batch_generator(batch_size, nb_batches)
 
     model = TestModel(hidden_state_size, nb_rnn_layers)
     adam = optim.Adam(model.parameters(), lr=1e-2)
 
-    fname = 'pos_tag_h{}_l{}'.format(hidden_state_size, nb_rnn_layers)
+    fname = 'postag_h{}_l{}_r{}'.format(hidden_state_size, 
+                                        nb_rnn_layers, 
+                                        postag_regularization)
 
     losses = []
     
@@ -111,9 +128,12 @@ if __name__ == '__main__':
             for batch in range(nb_batches):
                 input_text, target_tags, _, _ = next(gen)
 
-                out_tags, out_hn_tags = model.forward(input_text)
+                out_tags, _ = model.forward(input_text)
                 
-                loss = postag_objective_function(out_tags, target_tags, out_hn_tags)
+                loss = postag_objective_function(out_tags, 
+                                                 target_tags, 
+                                                 model.postag.w,
+                                                 Lambda=postag_regularization)
 
                 print("Epoch:", epoch,
                       "Batch:", batch,
@@ -126,20 +146,18 @@ if __name__ == '__main__':
                 if batch % 10 == 0:
                     losses.append(loss.data[0])
             
-            torch.save(model.state_dict(), './weights/{}.th'.format(fname))
+            torch.save(model.postag.state_dict(), './weights/{}.th'.format(fname))
     finally:
-        print("Generating plot.")
-        fig = plt.figure()
-        fig.suptitle('Part of Speech Bi-LSTM Tagging Task', fontsize=14, fontweight='bold')
+        #print("Generating plot.")
+        #fig = plt.figure()
+        #fig.suptitle('Part of Speech Bi-LSTM Tagging Task', fontsize=14, fontweight='bold')
+        #ax = fig.add_subplot(111)
+        #ax.plot(losses, color="red")
+        #ax.set_title('Hidden State Size: {}, Layers: {}'.format(hidden_state_size, 
+        #                                                        nb_rnn_layers))
+        #ax.set_xlabel('Batch Count')
+        #ax.set_ylabel('Loss')
+        #plt.savefig("./results/" + fname)
         
-        ax = fig.add_subplot(111)
-        
-        ax.plot(losses, color="red")
-        
-        ax.set_title('Hidden State Size: {}, Layers: {}'.format(hidden_state_size, 
-                                                                nb_rnn_layers))
-
-        ax.set_xlabel('Batch Count')
-        ax.set_ylabel('Loss')
-
-        plt.savefig("./results/" + fname)
+        with open('./results/' + fname + '.txt', 'w') as file:
+            file.write(' '.join(map(str, losses)))

@@ -7,9 +7,13 @@ from utils import nb_classes
 from utils import max_sentence_size
 from utils import batch_generator
 
+# The size of the character embedding used in all
+# other tasks.
 embedding_size = 50
 
 class CharacterLanguageModel(nn.Module):
+    """ The Word-Character Level Embedding Module. 
+    """
     def __init__(self):
         super(CharacterLanguageModel, self).__init__()
         
@@ -19,17 +23,23 @@ class CharacterLanguageModel(nn.Module):
         arr = list()
 
         for sentence in x:
+            # Sentence embedding
             sent_emb = list()
             
             for word in sentence:
-                emb = np.array(word)
-                emb = torch.from_numpy(emb)
-                emb = Variable(emb)
+                word = np.array(word)
+                word = torch.from_numpy(word)
+                word = Variable(word)
                 
-                emb = self.embedding(emb)
-                emb = torch.mean(emb, 0)
+                # Gets the embedding for each character in
+                # the word
+                char_emb = self.embedding(word)
                 
-                sent_emb.append(emb)
+                # Computes the mean between all character level
+                # embeddings. MxN -> 1xN
+                char_emb = torch.mean(char_emb, 0)
+                
+                sent_emb.append(char_emb)
             
             arr.append(sent_emb)
 
