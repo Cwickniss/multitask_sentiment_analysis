@@ -16,7 +16,7 @@ class CharacterLanguageModel(nn.Module):
     """
     def __init__(self):
         super(CharacterLanguageModel, self).__init__()
-        
+
         self.embedding = nn.Embedding(nb_classes, embedding_size)
 
     def forward(self, x):
@@ -25,22 +25,22 @@ class CharacterLanguageModel(nn.Module):
         for sentence in x:
             # Sentence embedding
             sent_emb = list()
-            
+
             for word in sentence:
                 word = np.array(word)
                 word = torch.from_numpy(word)
                 word = Variable(word)
-                
+
                 # Gets the embedding for each character in
                 # the word
                 char_emb = self.embedding(word)
-                
+
                 # Computes the mean between all character level
                 # embeddings. MxN -> 1xN
                 char_emb = torch.mean(char_emb, 0)
-                
+
                 sent_emb.append(char_emb)
-            
+
             arr.append(sent_emb)
 
         return arr

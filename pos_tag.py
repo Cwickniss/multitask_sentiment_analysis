@@ -45,7 +45,7 @@ class POSTag(nn.Module):
         
         return tags, out
 
-def postag_objective_function(predicted, targets, W, Lambda = 0.1):
+def postag_objective_function(predicted, targets, W, Lambda = 0.001):
     """ The objective function used to calculate the loss during the 
         training of the Part of Speech Module.
         
@@ -63,7 +63,7 @@ def postag_objective_function(predicted, targets, W, Lambda = 0.1):
         target = torch.from_numpy(target)
         target = Variable(target).long()
 
-        loss = F.nll_loss(predicted[i], target) + L2_norm
+        loss = F.cross_entropy(predicted[i], target) + L2_norm
 
         losses.append(loss)
 
@@ -75,7 +75,7 @@ def postag_objective_function(predicted, targets, W, Lambda = 0.1):
     loss = loss / length
 
     return loss
-    
+
 if __name__ == '__main__':
 
     class TestModel(nn.Module):
@@ -88,46 +88,46 @@ if __name__ == '__main__':
         def forward(self, x):
             embedded = self.lang_model.forward(x)
             out_tags, out_hn_tags = list(), list()
-            
+
             for batch in embedded:
                 sent = np.zeros((1, len(batch), embedding_size), dtype=np.float32)
-                
+
                 for i, word in enumerate(batch):
                     sent[0,i] = word.data.numpy()
-                
+
                 sent = torch.from_numpy(sent)
                 sent = Variable(sent)
-                
+
                 tags, hn_tags = self.postag.forward(sent)
-                
+
                 out_tags.append(tags)
                 out_hn_tags.append(hn_tags)
-            
+
             return out_tags, out_hn_tags
-    
+
     # training params
     batch_size = 12
-    
-    nb_train_batches = 2000
-    nb_val_batches = 40
-    nb_test_batches = 8300
-    
-    epochs = 6
-    
+
+    nb_train_batches = 1000
+    nb_val_batches = 200
+
+    epochs = 10
+
     # hyperparams
-    hidden_state_size = 200
+    hidden_state_size = 100
     nb_rnn_layers = 2
     postag_regularization = 0.001
-    
-    train_gen = batch_generator(batch_size, nb_train_batches)
-    val_gen = batch_generator(batch_size, nb_val_batches, 
-                              skip_batches=nb_train_batches)
-    
-    model = TestModel(hidden_state_size, nb_rnn_layers)
-    adam = optim.Adam(model.parameters(), lr=1e-2)
+    learning_rate = 1e-3
 
-    fname = 'postag_h{}_l{}_r{}'.format(hidden_state_size, 
-                                        nb_rnn_layers, 
+    train_gen = batch_generator(batch_size, nb_train_batches)
+    val_gen = batch_generator(batch_size, nb_val_batches,
+                              skip_batches=nb_train_batches)
+
+    model = TestModel(hidden_state_size, nb_rnn_layers)
+    adam = optim.Adam(model.parameters(), lr=learning_rate)
+
+    fname = 'postag_h{}_l{}_r{}'.format(hidden_state_size,
+                                        nb_rnn_layers,
                                         postag_regularization)
 
     train_acc = []
@@ -135,14 +135,14 @@ if __name__ == '__main__':
 
     try:
         for epoch in range(epochs):
-            
+
             correct, wrong = 0, 0
-            
+
             for batch in range(nb_train_batches):
                 input_text, target_tags, _, _ = next(train_gen)
 
                 out_tags, _ = model.forward(input_text)
-                
+
                 loss = postag_objective_function(out_tags, 
                                                  target_tags, 
                                                  model.postag.w,
@@ -157,7 +157,7 @@ if __name__ == '__main__':
                             wrong += 1
 
                 accuracy = (correct) / (correct + wrong)
-                
+
                 print("Epoch:", epoch,
                       "Batch:", batch,
                       "Loss:", loss.data[0],
@@ -168,14 +168,14 @@ if __name__ == '__main__':
                 adam.step()
 
             train_acc.append(accuracy)
-            
+
             correct, wrong = 0, 0
 
             for batch in range(nb_val_batches):
                 input_text, target_tags, _, _ = next(val_gen)
 
                 out_tags, _ = model.forward(input_text)
-                               
+
                 for predictions, targets in zip(out_tags, target_tags):
                     for pred, target in zip(predictions, targets):
                         pred = pred.data.numpy().argmax()
@@ -183,14 +183,14 @@ if __name__ == '__main__':
                             correct += 1
                         else:
                             wrong += 1
-                
+
                 accuracy = (correct) / (correct + wrong)
-                
+
                 print("Validation",
                       "Epoch:", epoch,
                       "Batch:", batch,
                       "Accuracy:", accuracy)
-            
+
             val_acc.append(accuracy)
 
             torch.save(model.postag.state_dict(), './weights/{}.{}.th'.format(fname, epoch))
@@ -210,4 +210,5 @@ if __name__ == '__main__':
 
         with open('./results/' + fname + '.txt', 'w') as file:
             file.write(' '.join(map(str, train_acc)))
+            file.write('\n')
             file.write(' '.join(map(str, val_acc)))
