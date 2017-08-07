@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 from utils import batch_generator
 from utils import nb_classes
 from utils import nb_postags
+from utils import nb_chunktags
 from utils import max_sentence_size
 from utils import avg_cross_entropy_loss
 from lang_model import CharacterLanguageModel
@@ -31,39 +32,43 @@ class Chunking(nn.Module):
 
         self.embedding = nn.Embedding(nb_postags, 20)
         
+        self.aux_emb = torch.arange(0, nb_postags)
+        self.aux_emb = Variable(self.aux_emb).long()
+        
         self.bi_lstm = nn.LSTM(self.input_size, 
                                hidden_state_size,
                                nb_rnn_layers,
                                bidirectional=True)
+        
+        self.fc = nn.Linear(hidden_state_size * 2, nb_chunktags)
 
     def mult_pos_emb(self, tags, emb):
+        # TODO: Implement in Torch
         tags = tags[:,np.newaxis].data.numpy()
         emb = emb.data.numpy()
         
         y_pos = tags * emb.T
         y_pos = np.sum(y_pos.T, axis=1).T
-        
+
         y_pos = torch.from_numpy(y_pos)
-        y_pos = Variable(y_pos).long()
+        y_pos = Variable(y_pos)
         y_pos = y_pos.view(1, -1, nb_postags)
-        
+
         return y_pos
         
     def forward(self, x, tags, hn_tags):
-        l_emb = torch.arange(0, nb_postags)
-        l_emb = Variable(l_emb).long()
-        l_emb = self.embedding(l_emb)
+        l_emb = self.embedding(self.aux_emb)
         
         y_pos = self.mult_pos_emb(tags, l_emb)
-                
+        
         gt = torch.cat([hn_tags, x, y_pos], dim=2)
         
         out, hn = self.bi_lstm(gt, (self.h[:,:x.size(1),:], 
                                     self.w[:,:x.size(1),:]))
         
-        #print(x.size(), out.size())
+        chunk = self.fc(out[0])
         
-        return x, None
+        return chunk, out
 
 hidden_state_size = 100
 nb_rnn_layers = 2
@@ -101,11 +106,13 @@ class TestModel(nn.Module):
 gen = batch_generator(8, 100)
 
 model = TestModel()
+adam = optim.Adam(model.parameters(), lr=1e-2)
 
 text, tags, chunks, sent = next(gen)
 
 out_tags, out_chunks = model.forward(text)
 
-#print(output[0])
-
+loss_tags = avg_cross_entropy_loss(out_tags, tags)
+loss_chunks = avg_cross_entropy_loss(out_chunks, chunks)
+print(loss_tags, loss_chunks)
 
