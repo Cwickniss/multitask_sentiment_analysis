@@ -74,12 +74,12 @@ nb_postags = len(postags)
 t2k = dict([(v,k) for k, v in enumerate(postags)])
 k2t = dict([(k,v) for k, v in enumerate(postags)])
 
-def get_dataset(batch_size, skip=0):
+def get_dataset(batch_size, skip=None):
     """ Gets the dataset iterator
     """
     dataset = pd.read_csv(dataset_file,
                           iterator=True,
-                          skiprows=skip * batch_size,
+                          skiprows=range(1, skip * batch_size) if skip else None,
                           chunksize=batch_size)
     return dataset
 
@@ -212,7 +212,7 @@ def sent2chunk(sentence):
 
     return out
 
-def batch_generator(batch_size, nb_batches, skip_batches=0):
+def batch_generator(batch_size, nb_batches, skip_batches=None):
     """ Batch generator for the many task joint model.
     """
     batch_count = 0

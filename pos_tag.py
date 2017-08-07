@@ -105,15 +105,24 @@ if __name__ == '__main__':
             
             return out_tags, out_hn_tags
     
-    nb_batches = 100
-    batch_size = 8
-    epochs = 100
+    # training params
+    batch_size = 12
+    
+    nb_train_batches = 2000
+    nb_val_batches = 40
+    nb_test_batches = 8300
+    
+    epochs = 6
+    
+    # hyperparams
     hidden_state_size = 200
     nb_rnn_layers = 2
     postag_regularization = 0.001
     
-    gen = batch_generator(batch_size, nb_batches)
-
+    train_gen = batch_generator(batch_size, nb_train_batches)
+    val_gen = batch_generator(batch_size, nb_val_batches, 
+                              skip_batches=nb_train_batches)
+    
     model = TestModel(hidden_state_size, nb_rnn_layers)
     adam = optim.Adam(model.parameters(), lr=1e-2)
 
@@ -121,12 +130,16 @@ if __name__ == '__main__':
                                         nb_rnn_layers, 
                                         postag_regularization)
 
-    losses = []
-    
+    train_acc = []
+    val_acc = []
+
     try:
         for epoch in range(epochs):
-            for batch in range(nb_batches):
-                input_text, target_tags, _, _ = next(gen)
+            
+            correct, wrong = 0, 0
+            
+            for batch in range(nb_train_batches):
+                input_text, target_tags, _, _ = next(train_gen)
 
                 out_tags, _ = model.forward(input_text)
                 
@@ -135,18 +148,52 @@ if __name__ == '__main__':
                                                  model.postag.w,
                                                  Lambda=postag_regularization)
 
+                for predictions, targets in zip(out_tags, target_tags):
+                    for pred, target in zip(predictions, targets):
+                        pred = pred.data.numpy().argmax()
+                        if pred == target:
+                            correct += 1
+                        else:
+                            wrong += 1
+
+                accuracy = (correct) / (correct + wrong)
+                
                 print("Epoch:", epoch,
                       "Batch:", batch,
-                      "Loss:", loss.data[0])
+                      "Loss:", loss.data[0],
+                      "Accuracy:", accuracy)
 
                 adam.zero_grad()
                 loss.backward()
                 adam.step()
 
-                if batch % 10 == 0:
-                    losses.append(loss.data[0])
+            train_acc.append(accuracy)
             
-            torch.save(model.postag.state_dict(), './weights/{}.th'.format(fname))
+            correct, wrong = 0, 0
+
+            for batch in range(nb_val_batches):
+                input_text, target_tags, _, _ = next(val_gen)
+
+                out_tags, _ = model.forward(input_text)
+                               
+                for predictions, targets in zip(out_tags, target_tags):
+                    for pred, target in zip(predictions, targets):
+                        pred = pred.data.numpy().argmax()
+                        if pred == target:
+                            correct += 1
+                        else:
+                            wrong += 1
+                
+                accuracy = (correct) / (correct + wrong)
+                
+                print("Validation",
+                      "Epoch:", epoch,
+                      "Batch:", batch,
+                      "Accuracy:", accuracy)
+            
+            val_acc.append(accuracy)
+
+            torch.save(model.postag.state_dict(), './weights/{}.{}.th'.format(fname, epoch))
     finally:
         #print("Generating plot.")
         #fig = plt.figure()
@@ -159,5 +206,8 @@ if __name__ == '__main__':
         #ax.set_ylabel('Loss')
         #plt.savefig("./results/" + fname)
         
+        torch.save(model.postag.state_dict(), './weights/{}.final.th'.format(fname))
+
         with open('./results/' + fname + '.txt', 'w') as file:
-            file.write(' '.join(map(str, losses)))
+            file.write(' '.join(map(str, train_acc)))
+            file.write(' '.join(map(str, val_acc)))
