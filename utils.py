@@ -123,7 +123,7 @@ def sent2vec(sentence):
     vecs = map(word2vec, words)
     vecs = list(vecs)
     vecs = vecs[:max_sentence_size]
-    
+
     return vecs
 
 def vec2sent(vec):
@@ -182,6 +182,7 @@ def sent2chunk(sentence):
     # Get pos tags
     tags = word_tokenize(sentence)
     tags = nltk.pos_tag(tags)
+    tags = tags[:max_sentence_size]
     
     # Chunks it
     chunked = chunk_parser.parse(tags)

@@ -79,7 +79,7 @@ def np2autograd(var):
     
 def chunking_objective_function(y_tag_pred, y_tag_target, W_tag,
                                 y_chk_pred, y_chk_target, W_chk,
-                                Lambda_tag = 0.001, Lambda_chk = 0.001):
+                                Lambda_tag = 0.001, Lambda_chk = 0.01):
     losses = []
     length = len(y_tag_pred)
 
@@ -106,13 +106,13 @@ def chunking_objective_function(y_tag_pred, y_tag_target, W_tag,
     
 if __name__ == '__main__':
 
-    chunking_hidden_state_size = 100
+    chunking_hidden_state_size = 200
     chunking_nb_rnn_layers = 2
 
     postag_hidden_state_size = 100
     postag_nb_rnn_layers = 2
 
-    learning_rate = 1e-3
+    learning_rate = 1e-2
 
     class TestModel(nn.Module):
         def __init__(self):
@@ -126,6 +126,8 @@ if __name__ == '__main__':
             self.chunking = Chunking(chunking_hidden_state_size, 
                                      chunking_nb_rnn_layers, 
                                      postag_hidden_state_size)
+            
+            self.pos_tag.load_state_dict(torch.load('./weights/postag_h100_l2_r0.001.2.th'))
 
         def forward(self, x):
             embedded = self.lang_model.forward(x)
@@ -151,7 +153,7 @@ if __name__ == '__main__':
 
     batch_size = 12
 
-    nb_train_batches = 10
+    nb_train_batches = 1000
     nb_val_batches = 200
 
     epochs = 10
@@ -162,6 +164,9 @@ if __name__ == '__main__':
     adam = optim.Adam(model.parameters(), lr=learning_rate)
 
     for epoch in range(epochs):
+        
+        correct, wrong = 0, 0
+        
         for batch in range(nb_train_batches):            
             text, tags, chunks, sent = next(train_gen)
 
@@ -170,9 +175,20 @@ if __name__ == '__main__':
             loss = chunking_objective_function(out_tags, tags, model.pos_tag.w,
                                                out_chunks, chunks, model.chunking.w)
             
+            for predictions, targets in zip(out_chunks, chunks):
+                for pred, target in zip(predictions, targets):
+                    pred = pred.data.numpy().argmax()
+                    if pred == target:
+                        correct += 1
+                    else:
+                        wrong += 1
+
+            accuracy = correct / (correct + wrong)
+            
             print("Epoch:", epoch,
                   "Batch:", batch,
-                  "Loss:", loss.data[0])
+                  "Loss:", loss.data[0],
+                  "Accuracy:", accuracy)
 
             adam.zero_grad()
             loss.backward()
