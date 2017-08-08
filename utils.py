@@ -17,6 +17,13 @@ max_word_size = 15
 # key value dicts
 boc_size = 10000
 
+def np2autograd(var):
+    var = np.array(var, dtype=np.float32)
+    var = torch.from_numpy(var)
+    var = Variable(var).long()
+
+    return var
+
 def avg_cross_entropy_loss(predicted, targets):
     """ Helper function for computing the simple mean
         cross entropy loss between the predicted one-hot
@@ -231,7 +238,7 @@ def batch_generator(batch_size, nb_batches, skip_batches=None):
             
         # The sentiment of the review where 1 is positive and 0 is negative
         sent = (chunk['Score'] >= 4).values
-        sent = np.int32(sent)
+        sent = np.int32(sent).reshape(-1, 1)
 
         yield text, tags, chunks, sent
 
