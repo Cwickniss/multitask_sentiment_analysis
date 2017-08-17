@@ -12,4 +12,4 @@ The paper *A Joint Many-Task Model: Growing a Neural Network for Multiple NLP Ta
 
 ## Architecture
 
-![Architecture Diagram](./assets/Multi-Task Sentiment Analysis.png)
+![Architecture Diagram](/assets/Multi-Task Sentiment Analysis.png)
